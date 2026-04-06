@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Expense Buddy — Smart Expense Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -508,6 +510,79 @@
   .toast.success { border-color: rgba(0,212,170,0.3); }
   .toast.error { border-color: rgba(255,107,107,0.3); }
 
+
+  /* LIGHT MODE */
+  body.light-mode {
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface2: #e8edf8;
+    --surface3: #dde4f5;
+    --border: #ccd5ee;
+    --border2: #a8b5d8;
+    --text: #1a2040;
+    --text2: #4a5578;
+    --text3: #8a96b8;
+    background-image: radial-gradient(ellipse at 20% 0%, rgba(0,212,170,0.04) 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 100%, rgba(0,153,255,0.04) 0%, transparent 60%);
+  }
+  body.light-mode .stat-card { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  body.light-mode .modal { box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  body.light-mode table thead th { background: #e8edf8; }
+  body.light-mode tbody tr:hover { background: rgba(0,0,0,0.02); }
+  body.light-mode .income-card { background: linear-gradient(135deg, rgba(0,212,170,0.05), rgba(0,153,255,0.05)); }
+
+  /* DARK/LIGHT TOGGLE */
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    z-index: 500;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border2);
+    background: var(--surface2);
+    cursor: pointer;
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.25s;
+    box-shadow: var(--shadow2);
+  }
+  .theme-toggle:hover {
+    border-color: var(--accent);
+    transform: scale(1.08);
+    box-shadow: 0 0 12px rgba(0,212,170,0.25);
+  }
+
+  /* EXPORT BUTTONS */
+  .export-bar {
+    display: flex; gap: 10px; align-items: center;
+    margin-bottom: 16px;
+  }
+  .btn-export-csv {
+    background: rgba(0,212,170,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(0,212,170,0.3);
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-family: 'Sora', sans-serif;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn-export-csv:hover { background: rgba(0,212,170,0.22); transform: translateY(-1px); }
+  .btn-export-excel {
+    background: rgba(52,168,83,0.12);
+    color: #34a853;
+    border: 1px solid rgba(52,168,83,0.3);
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-family: 'Sora', sans-serif;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn-export-excel:hover { background: rgba(52,168,83,0.22); transform: translateY(-1px); }
+
   /* SCROLLBAR */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--surface); }
@@ -549,6 +624,8 @@
 </style>
 </head>
 <body>
+
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
 
 <div class="toast-wrap" id="toastWrap"></div>
 
@@ -667,7 +744,7 @@
     </div>
     <div>
       <h1>Expense Buddy</h1>
-      <span>Smart Expense Intelligence</span>
+      <span>Smart Expense Predictions</span>
     </div>
   </div>
   <p class="tagline" style="margin-top:4px;">Track · Analyze · Optimize your financial life</p>
@@ -725,6 +802,13 @@
     <button class="btn btn-add" onclick="openModal()" style="white-space:nowrap; align-self:center;">
       ＋ Add Expense
     </button>
+  </div>
+
+  <!-- EXPORT BAR -->
+  <div class="export-bar">
+    <span class="filter-label" style="margin-right:4px;">📤 Export:</span>
+    <button class="btn-export-csv" onclick="exportCSV()">⬇️ CSV</button>
+    <button class="btn-export-excel" onclick="exportExcel()">⬇️ Excel (.xlsx)</button>
   </div>
 
   <!-- FILTER BAR -->
@@ -1304,7 +1388,34 @@ function renderPredictions() {
           x: { stacked: false, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8a96b8', font: { family: 'JetBrains Mono', size:11 } } },
           y: { stacked: false, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8a96b8', font: { family: 'JetBrains Mono', size:11 }, callback: v => '₹' + (v/1000).toFixed(0)+'k' } }
         },
-        plugins: { ...CHART_OPTS.plugins, legend: { ...CHART_OPTS.plugins.legend } }
+        plugins: {
+          ...CHART_OPTS.plugins,
+          legend: { ...CHART_OPTS.plugins.legend },
+          annotation: income > 0 ? {
+            annotations: {
+              incomeLine: {
+                type: 'line',
+                yMin: income,
+                yMax: income,
+                borderColor: 'rgba(255,209,102,0.95)',
+                borderWidth: 2.5,
+                borderDash: [8, 4],
+                label: {
+                  content: 'Income: ' + fmt(income),
+                  display: true,
+                  position: 'end',
+                  backgroundColor: 'rgba(255,209,102,0.18)',
+                  borderColor: 'rgba(255,209,102,0.5)',
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  color: '#ffd166',
+                  font: { family: 'JetBrains Mono', size: 11, weight: '700' },
+                  padding: { x: 10, y: 5 }
+                }
+              }
+            }
+          } : {}
+        }
       }
     });
   }
@@ -1434,6 +1545,104 @@ function generateInsights() {
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+
+// ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
+let isDark = localStorage.getItem('iq_theme') !== 'light';
+
+function applyTheme() {
+  document.body.classList.toggle('light-mode', !isDark);
+  document.getElementById('themeToggle').textContent = isDark ? '🌙' : '☀️';
+  localStorage.setItem('iq_theme', isDark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  isDark = !isDark;
+  applyTheme();
+  // Re-render charts to match new theme colors
+  renderAll();
+}
+
+// ─── CSV EXPORT ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!expenses.length) { showToast('No expenses to export', 'error'); return; }
+  const headers = ['Title','Amount','Date','Category','Payment Method','UPI App','Card Last 4','Credit Limit','Notes'];
+  const rows = expenses.map(e => [
+    e.title,
+    e.amount,
+    e.date,
+    e.category,
+    e.method,
+    e.upiApp || '',
+    e.last4 || '',
+    e.creditLimit || '',
+    e.notes || ''
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'expense_buddy_export.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exported successfully!');
+}
+
+// ─── EXCEL EXPORT ─────────────────────────────────────────────────────────────
+function exportExcel() {
+  if (!expenses.length) { showToast('No expenses to export', 'error'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Excel library not loaded', 'error'); return; }
+  const headers = ['Title','Amount','Date','Category','Payment Method','UPI App','Card Last 4','Credit Limit','Notes'];
+  const rows = expenses.map(e => [
+    e.title,
+    e.amount,
+    e.date,
+    e.category,
+    e.method,
+    e.upiApp || '',
+    e.last4 || '',
+    e.creditLimit || '',
+    e.notes || ''
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  // Style header row
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const cell = ws[XLSX.utils.encode_cell({r:0, c:C})];
+    if (cell) {
+      cell.s = {
+        font: { bold: true, color: { rgb: '0a0d14' } },
+        fill: { fgColor: { rgb: '00d4aa' } },
+        alignment: { horizontal: 'center' }
+      };
+    }
+  }
+  // Column widths
+  ws['!cols'] = [
+    {wch:24},{wch:12},{wch:12},{wch:14},{wch:16},{wch:12},{wch:12},{wch:14},{wch:28}
+  ];
+  // Summary sheet
+  const monthly = {};
+  expenses.forEach(e => {
+    const m = e.date.slice(0,7);
+    monthly[m] = (monthly[m]||0) + e.amount;
+  });
+  const summaryData = [
+    ['Month','Total Spent'],
+    ...Object.entries(monthly).sort().map(([m,v]) => [m, v]),
+    [],
+    ['Monthly Income', income],
+    ['Total All Time', expenses.reduce((s,e)=>s+e.amount,0)],
+    ['Total Transactions', expenses.length]
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+  ws2['!cols'] = [{wch:16},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+  XLSX.writeFile(wb, 'expense_buddy_export.xlsx');
+  showToast('Excel file exported!');
+}
+
+
 // ─── MAIN RENDER ──────────────────────────────────────────────────────────────
 function renderAll() {
   const filtered = getFiltered();
@@ -1453,6 +1662,8 @@ window.addEventListener('click', e => {
 
 // Prefill income if saved
 if (income) document.getElementById('incomeInput').value = income;
+
+applyTheme();
 
 renderAll();
 </script>
